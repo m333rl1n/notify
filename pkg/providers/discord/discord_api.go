@@ -3,10 +3,10 @@ package discord
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"strconv"
 
-	"github.com/projectdiscovery/notify/pkg/utils/httpreq"
+	"github.com/projectdiscovery/gologger"
 )
 
 func (options *Options) SendThreaded(message string) error {
@@ -17,24 +17,28 @@ func (options *Options) SendThreaded(message string) error {
 		AvatarURL: options.DiscordWebHookAvatarURL,
 	}
 
-	encoded, err := json.Marshal(payload)
+	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 
-	body := bytes.NewReader(encoded)
-
-	webHookURL := fmt.Sprintf("%s?thread_id=%s", options.DiscordWebHookURL, options.DiscordThreadID)
-
-	req, err := http.NewRequest(http.MethodPost, webHookURL, body)
+	req, err := http.NewRequest("POST", options.DiscordWebHookURL, bytes.NewBuffer(jsonData))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		return err
 	}
 
-	_, err = httpreq.NewClient().Do(req)
+	// Send the request using the default HTTP client
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		gologger.Error().Msgf("Error sending request: %v", err.Error())
+	}
+	defer resp.Body.Close()
+
+	// Check the response status code
+	if resp.StatusCode != http.StatusOK {
+		gologger.Error().Msgf("Request failed with status code: %s", strconv.Itoa(resp.StatusCode))
 	}
 
 	return nil

@@ -1,19 +1,12 @@
 package discord
 
 import (
-	"fmt"
-
-	"github.com/containrrr/shoutrrr"
-	"github.com/oriser/regroup"
-	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/notify/pkg/utils"
 	sliceutil "github.com/projectdiscovery/utils/slice"
 )
-
-var reDiscordWebhook = regroup.MustCompile(`(?P<scheme>https?):\/\/(?P<domain>(?:ptb\.|canary\.)?discord(?:app)?\.com)\/api(?:\/)?(?P<api_version>v\d{1,2})?\/webhooks\/(?P<webhook_identifier>\d{17,19})\/(?P<webhook_token>[\w\-]{68})`)
 
 type Provider struct {
 	Discord []*Options `yaml:"discord,omitempty"`
@@ -47,39 +40,9 @@ func (p *Provider) Send(message, CliFormat string) error {
 	var errs []error
 	for _, pr := range p.Discord {
 		msg := utils.FormatMessage(message, utils.SelectFormat(CliFormat, pr.DiscordFormat), p.counter)
+		gologger.Verbose().Msgf("discord notification sent for id: %s", msg)
 
-		if pr.DiscordThreads {
-			if pr.DiscordThreadID == "" {
-				err := fmt.Errorf("thread_id value is required when discord_threads is set to true. check your configuration at id: %s", pr.ID)
-				errs = append(errs, err)
-				continue
-			}
-			if err := pr.SendThreaded(msg); err != nil {
-				err = errors.Wrapf(err, "failed to send discord notification for id: %s ", pr.ID)
-				errs = append(errs, err)
-				continue
-			}
-
-		} else {
-			matchedGroups, err := reDiscordWebhook.Groups(pr.DiscordWebHookURL)
-			if err != nil {
-				err := fmt.Errorf("incorrect discord configuration for id: %s ", pr.ID)
-				errs = append(errs, err)
-				continue
-			}
-
-			webhookID, webhookToken := matchedGroups["webhook_identifier"], matchedGroups["webhook_token"]
-
-			//Reference: https://containrrr.dev/shoutrrr/v0.6/getting-started/
-			url := fmt.Sprintf("discord://%s@%s?username=%s&avatarurl=%s&splitlines=no",
-				webhookToken,
-				webhookID,
-				pr.DiscordWebHookUsername,
-				pr.DiscordWebHookAvatarURL)
-			if err := shoutrrr.Send(url, msg); err != nil {
-				errs = append(errs, errors.Wrapf(err, "failed to send discord notification for id: %s ", pr.ID))
-			}
-		}
+		pr.SendThreaded(msg)
 
 		gologger.Verbose().Msgf("discord notification sent for id: %s", pr.ID)
 	}
